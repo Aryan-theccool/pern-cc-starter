@@ -1,4 +1,7 @@
 import express from "express";
+import { db } from "./db.js";
+import { cars } from "./schema.js";
+import { eq } from "drizzle-orm";
 
 const app = express();
 const PORT = 3000;
@@ -7,11 +10,11 @@ const router = express.Router();
 
 app.use(express.json());
 
-let cars = [
-  { id: 1, make: "Toyota", model: "Camry", year: 2022, price: 28000 },
-  { id: 2, make: "Tesla", model: "Model S", year: 2023, price: 25000 },
-  { id: 3, make: "Ford", model: "F-150", year: 2021, price: 35000 },
-];
+// let cars = [
+//   { id: 1, make: "Toyota", model: "Camry", year: 2022, price: 28000 },
+//   { id: 2, make: "Tesla", model: "Model S", year: 2023, price: 25000 },
+//   { id: 3, make: "Ford", model: "F-150", year: 2021, price: 35000 },
+// ];
 
 app.use((req, res, next) => {
   const timestamp = new Date().toISOString();
@@ -23,11 +26,16 @@ app.get("/", (req, res) => {
   res.send("Hello from Car API!");
 });
 
-router.get("/cars", (req, res) => {
-  res.json(cars);
+router.get("/cars", async (req, res) => {
+  try {
+    const allCars = await db.select().from(cars);
+    res.json(allCars);
+  } catch (error) {
+    res.status(500).json({ error: "Failed to fetch cars" });
+  }
 });
 
-router.post("/cars", (req, res) => {
+router.post("/cars", async (req, res) => {
   const { make, model, year, price } = req.body;
 
   if (!make || !model || !year || !price) {
@@ -36,19 +44,14 @@ router.post("/cars", (req, res) => {
     });
   }
 
-  const nextId = cars.length + 1;
-
-  const newCar = {
-    id: nextId,
+  const [newcar] = await db.insert(cars).values({
     make,
     model,
     year: parseInt(year),
     price: parseFloat(price),
-  };
+  }).returning();
 
-  cars.push(newCar);
-
-  res.status(201).json(newCar);
+  res.status(201).json(newcar);
 });
 
 router.put("/cars/:id", (req, res) => {
@@ -85,15 +88,19 @@ router.delete("/cars/:id", (req, res) => {
   });
 });
 
-router.get("/cars/:id", (req, res) => {
-  const carId = parseInt(req.params.id);
-  const car = cars.find((c) => c.id === carId);
-
-  if (!car) {
-    return res.status(404).json({ error: "Car not found" });
+router.get("/cars/:id", async (req, res) => {
+  try {
+    const carId = parseInt(req.params.id);
+    const [car] = await db.select().from(cars).where(eq(cars.id, carId));
+    
+    if (!car) {
+      return res.status(404).json({ error: "Car not found" });
+    }
+    
+    res.json(car);
+  } catch (error) {
+    res.status(500).json({ error: "Failed to fetch car" });
   }
-
-  res.json(car);
 });
 
 app.use("/api/v1", router);
